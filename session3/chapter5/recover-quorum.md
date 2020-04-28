@@ -1,5 +1,4 @@
-
-# 5.3 多数副本丢失数据恢复指南
+## 5.3 多数副本丢失数据恢复指南
 
 ## 5.3.1 问题背景
 
@@ -23,7 +22,7 @@ TiDB 默认配置为 3 副本，每一个 Region 都会在集群中保存 3 份�
   - Region 至少还有 1 个副本，恢复思路是在 Region 的剩余副本上移除掉所有位于故障节点上的 Peer，
   这样可以用这些剩余副本来重新选举和补充副本来恢复，但这些剩余副本中可能不包含最新的 Raft Log 更新，这个时候就会丢失部分数据
   - Region 的所有副本都丢失了，这个 Region 的数据就丢失了，无法恢复。
-  可以通过创建 1 个空 Region 来解决 Region Unavailable 的问题
+  可以通过创建 1 个空 Region 来解决 Region 不可用的问题
   - 在恢复 Region 故障的过程中，要详细记录下所处理 Region 的信息，如 Region ID、Region 丢失副本的数量等
 - 丢失数据处理
   - 根据故障 Region ID 找到对应的表，找到相关用户并询问用户在故障前的某一段时间内（比如 5 min），大概写入了哪些数据表，是否有 DDL 操作，是否可以重新消费更上游的数据来再次写入，等等
@@ -42,16 +41,35 @@ TiDB 默认配置为 3 副本，每一个 Region 都会在集群中保存 3 份�
 
 - 处理还有剩余副本的 Region
   - 使用 pd-ctl 检查大于等于一半副本数在故障节点上的 Region，并记录它们的 ID（假设故障节点为 1，4，5）：
-`pd-ctl -u <endpoint> -d region --jq=’.regions[] | {id: .id, peer_stores: [.peers[].store_id] | select(length as $total | map(if .==(1,4,5) then . else empty end) | length>=$total-length) }’`
+  
+    ```
+    pd-ctl -u <endpoint> -d region --jq=’.regions[] | {id: .id, peer_stores: [.peers[].store_id] | select(length as $total | map(if .==(1,4,5) then . else empty end) | length>=$total-length) }’
+    ```
+    
   - 根据上面的 Region 的个数，可以采取 2 种不同的解决方式（运行以下命令时需关闭相应 Store 上面的 TiKV）：
     - Region 比较少，则可以在给定 Region 的剩余副本上，移除掉所有位于故障节点上的 Peer，在这些 Region 的未发生掉电故障的机器上运行：
-    `tikv-ctl --db /path/to/tikv-data/db unsafe-recover remove-fail-stores -s <s1,s2> -r <r1,r2,r3>`
+    
+    ```
+    tikv-ctl --db /path/to/tikv-data/db unsafe-recover remove-fail-stores -s <s1,s2> -r <r1,r2,r3>
+    ```
+    
     - 反之，则可以在所有未发生掉电故障的实例上，对所有 Region 移除掉所有位于故障节点上的 Peer，在所有未发生掉电故障的机器上运行：
-    `tikv-ctl --db /path/to/tikv-data/db unsafe-recover remove-fail-stores -s <s1,s2> --all-regions`
+    
+    ```
+    tikv-ctl --db /path/to/tikv-data/db unsafe-recover remove-fail-stores -s <s1,s2> --all-regions
+    ```
+    
     - 执行后所有仍然有副本健在的 Region 都可以选出 Leader
 
 - 处理所有副本都丢失的 Region
   - 重启 PD，重启 TiKV 集群，使用 `pd-ctl` 检查没有 Leader 的 Region：
-  `pd-ctl -u <endpoint> -d region --jq '.regions[]|select(has("leader")|not)|{id: .id, peer_stores: [.peers[].store_id]}'`
+  
+    ```
+    pd-ctl -u <endpoint> -d region --jq '.regions[]|select(has("leader")|not)|{id: .id, peer_stores: [.peers[].store_id]}'
+    ```
+   
   - 创建空 Region 解决 Unavailable 报错。任选一个 Store，关闭上面的 TiKV，然后执行：
-  `tikv-ctl --db /path/to/tikv-data/db recreate-region --pd <endpoint> -r <region_id>`
+
+    ```
+    tikv-ctl --db /path/to/tikv-data/db recreate-region --pd <endpoint> -r <region_id>
+    ```

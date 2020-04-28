@@ -1,17 +1,42 @@
 sudo: false
-dist: trusty
+dist: xenial
 language: node_js
 node_js:
   - 12
 cache: npm
 
+addons:
+  apt:
+    packages:
+      - calibre
+      - libfontconfig
+      # Japanese
+      - language-pack-ja
+      - japan*
+      # Chinese
+      - language-pack-zh*
+      - chinese*
+      # Korean
+      - language-pack-ko
+      - korean*
+      # Fonts
+      - fonts-wqy-zenhei
+      - fonts-ipafont-mincho
+      - fonts-ipafont-gothic
+      - fonts-unfonts-core
+
+before_install:
+  - npm install -g gitbook-cli svgexport@0.3.2
+
 before_script:
   - npm install
-  - npm install -g gitbook-cli
   - export PATH=$(npm bin):$PATH
+  - gitbook install
 
 script:
   - gitbook build . --gitbook=3.2.3
+  - gitbook pdf . --gitbook=3.2.3
+  - mv book.pdf _book/
 
 deploy:
   provider: pages

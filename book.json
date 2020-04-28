@@ -1,6 +1,8 @@
 {
+	"title": "TiDB in Action",
 	"plugins": [
-		"analytics"
+		"analytics",
+		"yahei"
 	],
 	"pluginsConfig": {
 		"analytics": {
